@@ -4,15 +4,14 @@
   "private": true,
   "description": "ゲームの世界観を守る X 投稿制作ツール（個人用・ローカル実行）",
   "scripts": {
-    "dev": "next dev -H 0.0.0.0 -p 3000",
+    "dev": "next dev -H 127.0.0.1 -p 3000",
     "build": "next build",
-    "start": "next start -H 0.0.0.0 -p 3000",
+    "start": "next start -H 127.0.0.1 -p 3000",
     "typecheck": "tsc --noEmit",
-    "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "seed:reset": "node scripts/reset-data.mjs"
+    "start:lan": "node scripts/check-lan.mjs && next start -H 0.0.0.0 -p 3000"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.1.0",
@@ -33,5 +32,8 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
+  },
+  "engines": {
+    "node": ">=20.9"
   }
 }

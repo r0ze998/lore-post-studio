@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+:root {
+  --bg: #f6f5f1;
+  --surface: #ffffff;
+  --surface-2: #efede7;
+  --border: #dcd9d0;
+  --text: #1f1f1d;
+  --muted: #6b6a64;
+  --accent: #2c6e67;
+  --accent-ink: #ffffff;
+  --accent-soft: #e2efed;
+  --danger: #b3261e;
+  --danger-soft: #fbe9e7;
+  --warn: #8a5a00;
+  --warn-soft: #fdf1d8;
+  --info: #3b5b8c;
+  --info-soft: #e7eef8;
+  --ok: #2e7d32;
+  --ok-soft: #e6f2e6;
+  --sample: #9a4d00;
+  --sample-soft: #fff0dc;
+  --focus: #2c6e67;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141413;
+    --surface: #1d1d1b;
+    --surface-2: #262623;
+    --border: #3a3935;
+    --text: #ecebe6;
+    --muted: #a3a29b;
+    --accent: #6cc0b5;
+    --accent-ink: #0d1f1d;
+    --accent-soft: #1f3431;
+    --danger: #ff8a80;
+    --danger-soft: #3a1f1d;
+    --warn: #f0c060;
+    --warn-soft: #3a2f17;
+    --info: #9cbcf0;
+    --info-soft: #1e2a3d;
+    --ok: #8fd694;
+    --ok-soft: #1d3320;
+    --sample: #ffb366;
+    --sample-soft: #3b2a17;
+    --focus: #6cc0b5;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface-2);
+  --color-line: var(--border);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-sample: var(--sample);
+  --color-sample-soft: var(--sample-soft);
+  --font-sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-text-size-adjust: 100%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+textarea {
+  font-family: inherit;
+}
+
+/* 本文の該当箇所のハイライト */
+mark.hl-error {
+  background: var(--danger-soft);
+  color: inherit;
+  border-bottom: 2px solid var(--danger);
+}
+mark.hl-warning {
+  background: var(--warn-soft);
+  color: inherit;
+  border-bottom: 2px solid var(--warn);
+}
+mark.hl-info {
+  background: var(--info-soft);
+  color: inherit;
+  border-bottom: 2px dotted var(--info);
+}
+mark.hl-over {
+  background: var(--danger);
+  color: #fff;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  scrollbar-width: none;
+}
