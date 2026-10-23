@@ -35,7 +35,7 @@ export function useProviders() {
  * ensureSaved: 未保存の編集があれば先に保存する。
  */
 export function GeneratePanel({ task, post, angleId, ensureSaved, onDone }: { task: GenerationTask; post: Post; angleId?: string; ensureSaved: () => Promise<boolean>; onDone: (p: Post) => void }) {
-  const { data } = useProject();
+  const { data, reload } = useProject();
   const providers = useProviders();
   const [provider, setProvider] = useState<ProviderId>("template");
   const [extra, setExtra] = useState("");
@@ -116,6 +116,7 @@ export function GeneratePanel({ task, post, angleId, ensureSaved, onDone }: { ta
                   if (r) {
                     setPreview(null);
                     onDone(r);
+                    await reload();
                   }
                 }}
               >
@@ -134,6 +135,7 @@ export function GeneratePanel({ task, post, angleId, ensureSaved, onDone }: { ta
                     setPasted("");
                     setPreview(null);
                     onDone(r);
+                    await reload();
                   }
                 }}
               >

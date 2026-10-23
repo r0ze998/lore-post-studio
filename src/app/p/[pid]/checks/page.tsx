@@ -31,8 +31,9 @@ export default function ChecksPage() {
 
   const adhoc = useMemo(() => {
     if (!text.trim()) return null;
-    const draft: DraftVersion = { id: "adhoc", createdAt: "", origin: "manual", generator: "", language: lang, creativeNotes: "", segments: text.split(/\n-{3,}\n/).map((t, i) => ({ id: `adhoc${i}`, text: t, voice, jaGloss: "", assetIds: [], provenance: [] })) };
-    const post = Post.parse({ id: "adhoc", projectId: data.project.id, type, title: "試し検査", status: "drafting", options: data.project.settings.defaults, brief: { language: lang }, drafts: [draft], currentDraftId: "adhoc", createdAt: "", updatedAt: "" });
+    const now = new Date().toISOString();
+    const draft: DraftVersion = { id: "adhoc", createdAt: now, origin: "manual", generator: "", language: lang, creativeNotes: "", segments: text.split(/\n-{3,}\n/).map((t, i) => ({ id: `adhoc${i}`, text: t, voice, jaGloss: "", assetIds: [], provenance: [] })) };
+    const post = Post.parse({ id: "adhoc", projectId: data.project.id, type, title: "試し検査", status: "drafting", options: data.project.settings.defaults, brief: { language: lang }, drafts: [draft], currentDraftId: "adhoc", createdAt: now, updatedAt: now });
     return { draft, report: runChecks(checkCtx, post, draft) };
   }, [text, voice, type, lang, data.project, checkCtx]);
 

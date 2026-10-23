@@ -655,7 +655,7 @@ export function LimitsNote() {
 /* ================================================================== */
 
 export function ApproveStep({ post, draft, report, dirty, save, onServerPost }: StepProps) {
-  const { data } = useProject();
+  const { data, reload } = useProject();
   const toast = useToast();
   const [reason, setReason] = useState("");
   const [tags, setTags] = useState<string[]>([]);
@@ -671,7 +671,7 @@ export function ApproveStep({ post, draft, report, dirty, save, onServerPost }: 
     const acks = post.acknowledgements.filter((a) => report.findings.some((f) => f.key === a.findingKey));
     const r = await run(() =>
       api<Post>(`/api/projects/${data.project.id}/posts/${post.id}/decision`, {
-        body: { kind, reason, tags, draftId: draft.id, acknowledgements: acks, checkSummary: report.counts },
+        body: { kind, reason, tags, draftId: draft.id, acknowledgements: acks, checkSummary: { errors: report.counts.error, warnings: report.counts.warning, infos: report.counts.info } },
       }),
     );
     if (!r) return;
@@ -679,6 +679,7 @@ export function ApproveStep({ post, draft, report, dirty, save, onServerPost }: 
       await run(() => api<Learning>(`/api/projects/${data.project.id}/learnings`, { body: { kind: kind === "approved" ? "do" : "dont", text: reason, pattern: kind === "rejected" ? pattern : "", origin: kind === "approved" ? "approval" : "rejection", postId: post.id } }));
     }
     onServerPost(r);
+    if (learn) await reload();
     toast(kind === "approved" ? "承認しました" : "却下しました", "ok");
     setReason("");
     setTags([]);

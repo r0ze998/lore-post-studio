@@ -176,7 +176,7 @@ function Editor({ server }: { server: Post }) {
         </div>
 
         {/* プレビュー：PC は右に固定、スマホは折りたたみ */}
-        <aside className="min-w-0">
+        <aside className="order-first min-w-0 lg:order-none">
           <div className="lg:sticky lg:top-16">
             <button type="button" className="mb-2 w-full rounded-md border border-line bg-surface px-3 py-2 text-left text-sm font-semibold lg:hidden" onClick={() => setShowPreview((v) => !v)} aria-expanded={showPreview}>
               {showPreview ? "▼" : "▶"} プレビュー
