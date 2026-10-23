@@ -128,6 +128,10 @@ export const PLAYER_ANECDOTE =
 export const REAL_PROMISE =
   /(報酬|配布|エアドロップ|無料|保証|必ず(?:もらえ|手に入|稼)|稼げ|儲か|獲得できます|もらえます|当選|プレゼント|特典|先着|プレセール|ホワイトリスト|airdrop|rewards?\b|\bearn\b|guaranteed|free mint|giveaway|whitelist|allowlist|presale)/iu;
 
+/** 上のうち、作中の出来事としてはまず使わない（現実の約束と読まれやすい）語。世界内の語りでは要修正にする。 */
+export const REAL_PROMISE_STRONG =
+  /(エアドロップ|無料|保証|必ず(?:もらえ|手に入|稼)|稼げ|儲か|当選|プレゼント|特典|先着|プレセール|ホワイトリスト|airdrop|guaranteed|free mint|giveaway|whitelist|allowlist|presale)/iu;
+
 /** 行動を促す言い回し（CTA）。 */
 export const CTA_PATTERN =
   /(フォロー(?:して|お願い|よろしく)|RT(?:して|お願い)|リポスト(?:して|お願い)|いいね(?:して|お願い)|今すぐ|チェックして|詳細はこちら|応募はこちら|プロフィールのリンク|リンクから|ぜひ(?:参加|遊んで|チェック|応募)|follow us|follow for|retweet|\brepost\b|like and|check (?:it )?out|join (?:now|us)|sign up|link in bio|don't miss|apply now|register now)/iu;

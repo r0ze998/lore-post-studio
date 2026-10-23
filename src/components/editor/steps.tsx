@@ -7,7 +7,7 @@ import { RULES, GENERAL_LIMITS } from "@/lib/checks/catalog";
 import { countX } from "@/lib/checks/xcount";
 import { unacknowledgedErrors, type CheckReport, type Finding, type SentenceProvenance } from "@/lib/checks/engine";
 import { altTextFile, imagePrompt, postMarkdown, threadPlainText } from "@/lib/domain/exporting";
-import { api, clientId, downloadBlob, fmtDate } from "@/lib/client/api";
+import { api, clientId, downloadBlob, fmtDate, toLocalInput } from "@/lib/client/api";
 import { useProject } from "../project-context";
 import { EntryPicker } from "../entry-picker";
 import { Badge, Button, Checkbox, CopyButton, Field, Input, ListInput, Modal, Notice, Select, Textarea, cx, useAsyncAction, useToast } from "../ui";
@@ -803,7 +803,7 @@ export function RecordStep({ post, draft, onServerPost }: StepProps) {
   const { data, replaceEntry } = useProject();
   const pub = post.publication;
   const [url, setUrl] = useState(pub?.url ?? "");
-  const [postedAt, setPostedAt] = useState(pub?.postedAt ?? "");
+  const [postedAt, setPostedAt] = useState(toLocalInput(pub?.postedAt));
   const [postedText, setPostedText] = useState(pub?.postedText ?? "");
   const [retro, setRetro] = useState(pub?.retro ?? "");
   const [m, setM] = useState({ impressions: "", likes: "", reposts: "", replies: "", quotes: "", bookmarks: "", note: "" });

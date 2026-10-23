@@ -78,3 +78,13 @@ export function fmtDate(iso: string | undefined, withTime = false): string {
   const s = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   return withTime ? `${s} ${pad(d.getHours())}:${pad(d.getMinutes())}` : s;
 }
+
+/** datetime-local 入力欄用（"YYYY-MM-DDTHH:MM"、ローカル時刻）。ISO（Z 付き）も受け付ける。 */
+export function toLocalInput(v: string | undefined): string {
+  if (!v) return "";
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v)) return v;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}

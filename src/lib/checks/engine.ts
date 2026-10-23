@@ -44,6 +44,7 @@ import {
   PLACEHOLDER,
   PLAYER_ANECDOTE,
   REAL_PROMISE,
+  REAL_PROMISE_STRONG,
   REPUTATION_HYPE,
   TEST_WORDS,
   TESTIMONIAL_SUBJECT,
@@ -530,7 +531,9 @@ export function runChecks(ctx: CheckContext, post: Post, draft: DraftVersion, no
       }
 
       // 声・評判
-      const hasQuote = /[「『"“].+[」』"”]/u.test(s.text);
+      // 引用（「」“”""）があるか。『』は題名に使われるので数えない。ゲーム名・設定名だけの括弧も除く。
+      const knownNames = new Set([...settings.identityAnchors, ...activeEntries.flatMap(namesOf)].map(norm));
+      const hasQuote = Array.from(s.text.matchAll(/「([^」]+)」|“([^”]+)”|"([^"]+)"/gu)).some((m) => !knownNames.has(norm(m[1] ?? m[2] ?? m[3] ?? "")));
       const subject = s.text.match(TESTIMONIAL_SUBJECT);
       const verb = TESTIMONIAL_VERB.test(s.text);
       const hype = s.text.match(REPUTATION_HYPE);
@@ -596,11 +599,15 @@ export function runChecks(ctx: CheckContext, post: Post, draft: DraftVersion, no
       // 現実の約束
       for (const r of findRegex(v.text, REAL_PROMISE.source)) {
         if (inFrame(v, r)) continue;
+        const word = v.text.slice(r.start, r.end);
+        const strong = REAL_PROMISE_STRONG.test(word);
         add({
           ruleId: "real-promise",
-          severity: "error",
-          title: `世界内の語りに現実の約束「${v.text.slice(r.start, r.end)}」`,
-          message: "報酬・無料・配布などのサービス提供に関わる話は、世界内の語りと混ぜると誤解を招きます。開発者の語り（または※注記）に分け、告知情報に根拠を置いてください。",
+          severity: strong ? "error" : "warning",
+          title: `世界内の語りに現実の約束${strong ? "" : "と読める語"}「${word}」`,
+          message: strong
+            ? "無料・特典・先着などのサービス提供に関わる話は、世界内の語りと混ぜると誤解を招きます。開発者の語り（または※注記）に分け、告知情報に根拠を置いてください。"
+            : "作中の出来事（キャラバンへの報酬など）なら問題ありません。現実のプレイヤーへの約束として読まれないか確認してください。現実の約束なら開発者の語りに分けてください。",
           segmentIndex: v.index,
           ranges: [r],
           refs: [],

@@ -396,6 +396,37 @@ export function buildSamplePosts(): Post[] {
       },
     }),
     post({
+      id: "pst_s_recruit",
+      type: "recruit",
+      title: "第2回クローズドテスト募集",
+      status: "approved",
+      brief: { purpose: "第2回テストの参加者を集める", audience: "戦略ゲーム好き", factIds: ["ent_s_notice_ct2"], canonIds: [], assetIds: [], continuesPostIds: [], seriesName: "", language: "ja", voice: "developer", notes: "" },
+      options: { ...SAMPLE_DEFAULTS, hashtags: [...SAMPLE_DEFAULTS.hashtags], cta: "explicit", ctaText: "応募はこちら" },
+      drafts: [
+        {
+          id: "drf_s_recruit",
+          createdAt: "2026-10-21T00:00:00.000Z",
+          origin: "manual",
+          generator: "",
+          language: "ja",
+          creativeNotes: "",
+          segments: [
+            {
+              id: "seg_s_recruit",
+              voice: "developer",
+              text: "『塩の街道』第2回クローズドテストの参加者を募集します。\n期間：11/10〜11/24\n条件：PCのみ・先着200名・参加無料（テスト中の成果は正式版に引き継がれません）\n応募はこちら https://example.com/saltroad/apply",
+              jaGloss: "",
+              assetIds: [],
+              provenance: [],
+            },
+          ],
+        },
+      ],
+      currentDraftId: "drf_s_recruit",
+      decisions: [{ kind: "approved", reason: "告知情報どおりの条件だけを書いている。", tags: [], draftId: "drf_s_recruit", at: "2026-10-21T01:00:00.000Z", acknowledgements: [] }],
+      scheduleCandidate: "2026-11-03T19:00",
+    }),
+    post({
       id: "pst_s_bad1",
       type: "devlog",
       title: "【検査デモ】問題の多い下書き",

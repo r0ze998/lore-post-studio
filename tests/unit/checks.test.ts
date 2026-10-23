@@ -22,6 +22,16 @@ describe("良い投稿は止めない", () => {
   });
 });
 
+describe("サンプルの承認済み投稿", () => {
+  it("承認済み・投稿済みのサンプル投稿には要修正がない", () => {
+    const ctx = sampleCtx();
+    for (const p of ctx.posts.filter((x) => x.status === "approved" || x.status === "posted")) {
+      const r = runChecks(ctx, p, p.drafts[0]);
+      expect(r.counts.error, `${p.id}: ${rules(r).join(",")}`).toBe(0);
+    }
+  });
+});
+
 describe("設定矛盾", () => {
   it("登録した矛盾パターン（白海が100年前に干上がった）を検出し、参照設定を示す", () => {
     const r = check([{ voice: "in_world", text: "白海が干上がったのは百年前のことだ。" + FRAME }], { type: "story" });
@@ -160,6 +170,16 @@ describe("架空の実績・存在しない声", () => {
     expect(has(r, "player-anecdote", "warning")).toBe(true);
   });
 
+  it("題名の『』や「ゲーム名」だけの括弧は声の引用として扱わない", () => {
+    const r = check([{ text: "『塩の街道』第2回クローズドテストの参加者を募集しています。「塩の街道」のテスト版です。" }], { type: "recruit", brief: { factIds: ["ent_s_notice_ct2"] } });
+    expect(has(r, "testimonial")).toBe(false);
+  });
+
+  it("同じ募集の承認済み投稿があれば重複として知らせる", () => {
+    const r = check([{ text: "『塩の街道』第2回クローズドテストの参加者を募集します。\n期間：11/10〜11/24\n条件：PCのみ・先着200名・参加無料\n応募はこちら https://example.com/saltroad/apply" }], { type: "recruit", brief: { factIds: ["ent_s_notice_ct2"] }, options: { cta: "explicit" } });
+    expect(find(r, "duplicate")[0]?.refs[0].id).toBe("pst_s_recruit");
+  });
+
   it("世界内の語りで作中人物が話すのは声として扱わない", () => {
     const r = check([{ voice: "in_world", text: "センは「今夜は進まない」と言った。" + FRAME }], { type: "story" });
     expect(has(r, "testimonial")).toBe(false);
@@ -214,6 +234,11 @@ describe("語り手の区別・現実の約束", () => {
     expect(has(r, "real-promise", "error")).toBe(true);
   });
 
+  it("作中の「報酬」は要確認にとどめる（現実の約束と断定しない）", () => {
+    const r = check([{ voice: "in_world", text: "塩暦212年46日目。案内の報酬は塩札二枚だった。——記録係ミナト" + FRAME }], { type: "story" });
+    expect(find(r, "real-promise").map((f) => f.severity)).toEqual(["warning"]);
+  });
+
   it("開発者の語りで世界内の語り手の署名を使うと知らせる", () => {
     const r = check([{ text: "『塩の街道』v0.3 を公開しました。——記録係ミナト" }]);
     expect(find(r, "voice-mixing")[0]?.refs[0]?.id).toBe("ent_s_voice_minato");
@@ -227,11 +252,14 @@ describe("募集投稿", () => {
   });
 
   it("告知情報と一致する日付・条件なら止めず、違う日付は知らせる", () => {
+    // サンプルには同じ募集の承認済み投稿があるため、重複にならないよう除いた状態で確かめる
+    const ctx = sampleCtx();
+    ctx.posts = ctx.posts.filter((p) => p.id !== "pst_s_recruit");
     const ok = check([{ text: "『塩の街道』第2回クローズドテスト：11/10〜11/24。PCのみ、先着200名、参加無料。応募はこちら https://example.com/saltroad/apply" }], {
       type: "recruit",
       brief: { factIds: ["ent_s_notice_ct2"] },
       options: { cta: "explicit" },
-    });
+    }, ctx);
     expect(ok.counts.error, rules(ok).join(",")).toBe(0);
     expect(has(ok, "recruit-notice")).toBe(false);
     expect(has(ok, "real-promise")).toBe(false);

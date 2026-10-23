@@ -6,7 +6,7 @@ import { Badge, Empty, Notice, PageHeader } from "@/components/ui";
 import { currentDraft } from "@/lib/checks/engine";
 import { threadPlainText } from "@/lib/domain/exporting";
 import { POST_TYPE_LABEL } from "@/lib/domain/labels";
-import { fmtDate } from "@/lib/client/api";
+import { fmtDate, toLocalInput } from "@/lib/client/api";
 
 export default function HistoryPage() {
   const { data, base } = useProject();
@@ -33,7 +33,7 @@ export default function HistoryPage() {
                   <Badge tone="neutral" title="X の API では確認していません">
                     手動記録
                   </Badge>
-                  <span className="ml-auto text-[12px] text-muted">投稿 {pub.postedAt ? pub.postedAt.replace("T", " ").slice(0, 16) : "日時未記入"}</span>
+                  <span className="ml-auto text-[12px] text-muted">投稿 {pub.postedAt ? toLocalInput(pub.postedAt).replace("T", " ") : "日時未記入"}</span>
                 </div>
                 <p className="mt-1 line-clamp-3 text-sm whitespace-pre-wrap text-muted">{pub.postedText || (d ? threadPlainText(d) : "")}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px]">
