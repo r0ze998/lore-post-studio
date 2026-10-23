@@ -352,3 +352,26 @@ describe("根拠マップ", () => {
     expect(p[2].basis).toBe("frame");
   });
 });
+
+describe("ふつうの文章での誤検出を防ぐ（独立レビューで見つかった例）", () => {
+  it("「ファンタジー」「fantasy」「love to hear」はユーザーの声にしない", () => {
+    expect(has(check([{ text: "ファンタジーの世界で商人の声を聞く、塩の街道の開発日記です。" }]), "testimonial")).toBe(false);
+    expect(has(check([{ text: "Salt Road is a fantasy trading game. We'd love to hear from players!", jaGloss: "塩の街道は交易ゲーム。" }], { language: "en" }), "testimonial")).toBe(false);
+  });
+
+  it("価格（金額だけ）は賞金として止めない／賞金の語があれば止める", () => {
+    expect(has(check([{ text: "『塩の街道』の価格は1,200円の予定です。" }]), "claim-evidence")).toBe(false);
+    expect(has(check([{ text: "『塩の街道』大会の賞金は1,200円です。" }]), "claim-evidence", "error")).toBe(true);
+  });
+
+  it("作中の「保証」「井戸の開発」は要修正にしない", () => {
+    const r = check([{ voice: "in_world", text: "隊長は無事を保証すると言った。灯台町では井戸の開発が進んでいる。" + FRAME }], { type: "story" });
+    expect(r.counts.error, rules(r).join(",")).toBe(0);
+    expect(find(r, "voice-mixing").every((f) => f.severity === "info")).toBe(true);
+  });
+
+  it("「一つ」「一人」は数値の食い違いにしない", () => {
+    const r = check([{ voice: "in_world", text: "ミズハの井戸の一つは涸れていた。" + FRAME }], { type: "story" });
+    expect(has(r, "number-mismatch")).toBe(false);
+  });
+});

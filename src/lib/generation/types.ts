@@ -64,6 +64,8 @@ export interface ContextItem {
   title: string;
   status: string;
   reason?: string;
+  /** 未公開だが本人が今回送ると選んだ項目。 */
+  internal?: boolean;
 }
 
 export interface PromptPackage {
@@ -74,6 +76,8 @@ export interface PromptPackage {
   included: ContextItem[];
   /** 送信しない正本項目と理由。 */
   excluded: ContextItem[];
+  /** 自由文（企画・学び・過去の下書きなど）から伏せた未公開の名前。 */
+  redactions: { where: string; count: number }[];
   chars: number;
   hash: string;
 }

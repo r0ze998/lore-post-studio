@@ -91,6 +91,7 @@ export async function handleGenerate(projectId: string, req: GenerateRequest): P
       promptChars: pkg.chars,
       ok: true,
       error: "",
+      note: "貼り戻し時点の送信内容（実際にコピーした内容と異なる場合があります）",
     });
   } else if (req.provider === "template") {
     origin = "template";
@@ -124,6 +125,7 @@ export async function handleGenerate(projectId: string, req: GenerateRequest): P
         estimatedCostUsd: r.usage ? costOf(r.model, r.usage) : undefined,
         ok: true,
         error: "",
+        note: r.note ?? "",
       });
     } catch (e) {
       await store.appendSendLog(projectId, {
@@ -136,6 +138,7 @@ export async function handleGenerate(projectId: string, req: GenerateRequest): P
         promptChars: pkg.chars,
         ok: false,
         error: e instanceof Error ? e.message.slice(0, 500) : String(e),
+        note: "",
       });
       if (e instanceof ParseError) throw new StoreError(`モデルの出力を読み取れませんでした: ${e.message}`, 502);
       throw new StoreError(`Anthropic API の呼び出しに失敗しました: ${e instanceof Error ? e.message : String(e)}`, 502);
@@ -144,8 +147,8 @@ export async function handleGenerate(projectId: string, req: GenerateRequest): P
     throw new StoreError("手動中継はプロンプトをコピーして、結果を貼り戻してください");
   }
 
-  const post = applyOutput(data.post, req.task, output, origin, generator);
-  return store.updatePost(projectId, post.id, post);
+  const result = output;
+  return store.appendToPost(projectId, data.post.id, (current) => applyOutput(current, req.task, result, origin, generator));
 }
 
 function applyOutput(post: Post, task: GenerationTask, output: AnglesOutput | DraftOutput, origin: "template" | "model" | "relay", generator: string): Post {

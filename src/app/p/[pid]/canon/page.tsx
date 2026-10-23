@@ -227,6 +227,7 @@ function ImportDialog({ open, onClose }: { open: boolean; onClose: () => void })
   const [text, setText] = useState("");
   const [kind, setKind] = useState<EntryKind>("lore");
   const [label, setLabel] = useState("");
+  const [visibility, setVisibility] = useState<"internal" | "public">("internal");
   const { busy, run } = useAsyncAction();
   let parsed: ReturnType<typeof parseImportText> = [];
   let error = "";
@@ -248,7 +249,7 @@ function ImportDialog({ open, onClose }: { open: boolean; onClose: () => void })
             variant="primary"
             disabled={busy || !parsed.length || !label.trim()}
             onClick={async () => {
-              const r = await run(() => api(`/api/projects/${data.project.id}/entries`, { method: "PUT", body: { entries: parsed, sourceLabel: label } }), `${parsed.length} 件を「提案」として取り込みました`);
+              const r = await run(() => api(`/api/projects/${data.project.id}/entries`, { method: "PUT", body: { entries: parsed.map((p) => ({ ...p, visibility })), sourceLabel: label } }), `${parsed.length} 件を「提案」として取り込みました`);
               if (r) {
                 await reload();
                 setText("");
@@ -262,10 +263,21 @@ function ImportDialog({ open, onClose }: { open: boolean; onClose: () => void })
       }
     >
       <div className="flex flex-col gap-3">
-        <Notice tone="warn">取り込んだ項目はすべて「提案」になります。過去の資料をそのまま確定設定にはしません。内容を確認してから一つずつ「確定」にしてください。</Notice>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <Notice tone="warn">取り込んだ項目はすべて「提案」になります。過去の資料をそのまま確定設定にはしません。内容を確認してから一つずつ「確定」（必要なら「公開してよい」）にしてください。</Notice>
+        <div className="grid gap-3 sm:grid-cols-3">
           <Field label="出典の名前（必須）" htmlFor="imp-label" hint="例：2025 企画書 v1">
             <Input id="imp-label" value={label} onChange={(e) => setLabel(e.target.value)} />
+          </Field>
+          <Field label="公開区分" htmlFor="imp-vis" hint="過去資料は未公開の情報を含みやすいため、既定は「未公開」です（投稿に書けず、外部モデルにも送りません）。">
+            <Select
+              id="imp-vis"
+              value={visibility}
+              onChange={(e) => setVisibility(e.target.value as "internal" | "public")}
+              options={[
+                { value: "internal", label: "未公開（既定）" },
+                { value: "public", label: "公開してよい" },
+              ]}
+            />
           </Field>
           <Field label="種類（見出し形式のとき）" htmlFor="imp-kind">
             <Select id="imp-kind" value={kind} onChange={(e) => setKind(e.target.value as EntryKind)} options={(Object.keys(ENTRY_KIND_LABEL) as EntryKind[]).map((k) => ({ value: k, label: ENTRY_KIND_LABEL[k] }))} />

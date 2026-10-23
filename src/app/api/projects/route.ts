@@ -6,7 +6,7 @@ import { ProjectKind } from "@/lib/domain/schema";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return handle(async () => ({ projects: await store.listProjects() }));
+  return handle(async () => ({ projects: await store.listProjects(), broken: store.getBrokenProjects() }));
 }
 
 const CreateBody = z.object({ name: z.string().trim().min(1).max(120), kind: ProjectKind, description: z.string().max(2000).default("") });

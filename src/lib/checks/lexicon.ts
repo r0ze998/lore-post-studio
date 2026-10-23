@@ -42,17 +42,12 @@ export const DEFAULT_DEVELOPER_MARKERS = [
   "アップデート",
   "パッチ",
   "リリース",
-  "バージョン",
-  "テスト",
   "β版",
-  "ベータ",
+  "ベータ版",
   "バグ",
   "不具合",
-  "開発",
-  "運営",
   "ウォレット",
   "ガス代",
-  "トークン",
   "NFT",
   "ブロックチェーン",
   "オンチェーン",
@@ -60,19 +55,13 @@ export const DEFAULT_DEVELOPER_MARKERS = [
   "Discord",
   "フォロー",
   "リポスト",
-  "応募",
   "サーバー",
   "メンテナンス",
   "プレイヤー",
   "ユーザー",
   "ログイン",
-  "update",
-  "patch",
-  "release",
-  "beta",
   "wallet",
   "gas fee",
-  "token",
   "blockchain",
   "onchain",
   "on-chain",
@@ -81,6 +70,9 @@ export const DEFAULT_DEVELOPER_MARKERS = [
   "players",
   "follow us",
 ];
+
+/** 作中でも普通に使われうる語（井戸の開発、町の運営など）。世界内の語りでは「参考」として知らせるだけにする。 */
+export const AMBIGUOUS_DEVELOPER_MARKERS = ["開発", "運営", "テスト", "バージョン", "トークン", "応募", "update", "release", "beta", "token", "patch"];
 
 /** 「もう使える」と断定する言い回し。 */
 export const ASSERT_AVAILABLE =
@@ -104,7 +96,8 @@ export const CLAIM_PATTERNS: { type: "award" | "partnership" | "prize" | "metric
   {
     type: "prize",
     label: "賞金・報酬額",
-    re: /(賞金|報酬総額|総額\s*[\d０-９]|プライズ|prize|reward pool|[$＄]\s?[\d０-９][\d,.]*|[\d][\d,.]*\s?(?:USD|USDC|ドル|万円|円|ETH|STRK))/iu,
+    // 金額だけ（価格など）は対象にしない。賞金・報酬総額などの語があるときだけ見る
+    re: /(賞金|報酬総額|総額|プライズ|\bprize(?: pool)?\b|reward pool)/iu,
   },
   {
     type: "metric",
@@ -115,9 +108,9 @@ export const CLAIM_PATTERNS: { type: "award" | "partnership" | "prize" | "metric
 
 /** ユーザーの声・評判として書かれていそうな言い回し。 */
 export const TESTIMONIAL_SUBJECT =
-  /(プレイヤー|ユーザー|テスター|参加者|ファン|コミュニティ|皆さん|みなさん|お客様|players?|users?|testers?|fans?|community|reviewers?)/iu;
+  /(プレイヤー|ユーザー|テスター|参加者|ファン(?![タシデドク])|コミュニティ|皆さん|みなさん|お客様|\b(?:players?|users?|testers?|fans?|community|reviewers?)\b)/iu;
 export const TESTIMONIAL_VERB =
-  /(から(?:は|も)?[^。\n]{0,20}(?:声|感想|評価)|の声|の感想|曰く|いわく|と(?:言|い)って|と話|と絶賛|says?|said|told us|loved?|praised|called it|describe[sd]? it)/iu;
+  /(から(?:は|も)?[^。\n]{0,20}(?:声|感想|評価)|の声|の感想|曰く|いわく|と(?:言|い)って|と話|と絶賛|\b(?:says?|said|told us|loved?|praised|called it|describe[sd]? it)\b)/iu;
 export const REPUTATION_HYPE = /(大好評|絶賛|話題沸騰|話題の|口コミで|高評価|★{3,}|☆{3,}|five[- ]star|rave reviews|fan favorite|fan-favorite|beloved by|everyone loves)/iu;
 
 /** 実在のプレイヤー行動を語っていそうな言い回し。 */
@@ -130,7 +123,7 @@ export const REAL_PROMISE =
 
 /** 上のうち、作中の出来事としてはまず使わない（現実の約束と読まれやすい）語。世界内の語りでは要修正にする。 */
 export const REAL_PROMISE_STRONG =
-  /(エアドロップ|無料|保証|必ず(?:もらえ|手に入|稼)|稼げ|儲か|当選|プレゼント|特典|先着|プレセール|ホワイトリスト|airdrop|guaranteed|free mint|giveaway|whitelist|allowlist|presale)/iu;
+  /(エアドロップ|無料|必ず(?:もらえ|手に入|稼)|稼げ|儲か|当選|プレゼント|特典|先着|プレセール|ホワイトリスト|airdrop|guaranteed|free mint|giveaway|whitelist|allowlist|presale)/iu;
 
 /** 行動を促す言い回し（CTA）。 */
 export const CTA_PATTERN =

@@ -13,6 +13,7 @@ import type { Asset, Entry, Learning, Post, Project } from "@/lib/domain/schema"
 import { KIND_DOMAIN } from "@/lib/domain/schema";
 import { CLAIM_TYPE_LABEL, ENTRY_KIND_LABEL, FEATURE_STATUS_LABEL, POST_TYPE_LABEL, STATUS_LABEL } from "@/lib/domain/labels";
 import { namesOf } from "@/lib/domain/canon";
+import { findAll } from "@/lib/domain/match";
 import { currentDraft, draftPlainText } from "@/lib/checks/engine";
 import { DEFAULT_BANNED_PHRASES } from "@/lib/checks/lexicon";
 import type { ContextItem, GenerationTask, PromptPackage } from "./types";
@@ -43,7 +44,36 @@ export function fnv1a(s: string): string {
 }
 
 function item(e: Entry, reason?: string): ContextItem {
-  return { id: e.id, kind: ENTRY_KIND_LABEL[e.kind], title: e.title, status: STATUS_LABEL[e.status], reason };
+  return { id: e.id, kind: ENTRY_KIND_LABEL[e.kind], title: e.title, status: STATUS_LABEL[e.status], reason, internal: e.visibility === "internal" || undefined };
+}
+
+export const REDACTED = "［未公開のため伏せ字］";
+
+/**
+ * 自由文から未公開の名前を伏せる。
+ * 企画メモ・学び・過去の下書きなどは正本の公開区分では選別できないため、名前の一致で伏せる。
+ * （名前を使わずに未公開の内容を書いた文までは判別できない。）
+ */
+export function makeRedactor(entries: Entry[], optIn: Set<string>) {
+  const names = Array.from(
+    new Set(entries.filter((e) => e.visibility === "internal" && !optIn.has(e.id)).flatMap(namesOf)),
+  ).sort((a, b) => b.length - a.length);
+  const counts = new Map<string, number>();
+  const redact = (text: string, where: string): string => {
+    if (!text || !names.length) return text;
+    let out = text;
+    let n = 0;
+    for (const name of names) {
+      const ranges = findAll(out, name);
+      for (const r of [...ranges].reverse()) {
+        out = out.slice(0, r.start) + REDACTED + out.slice(r.end);
+        n++;
+      }
+    }
+    if (n) counts.set(where, (counts.get(where) ?? 0) + n);
+    return out;
+  };
+  return { redact, report: () => Array.from(counts, ([where, count]) => ({ where, count })) };
 }
 
 export function selectContext(input: PromptInput): { included: Entry[]; excluded: { entry: Entry; reason: string }[]; doNotUse: string[] } {
@@ -154,6 +184,7 @@ export function buildPrompt(input: PromptInput): PromptPackage {
   const s = project.settings;
   const { included, excluded, doNotUse } = selectContext(input);
   const chosen = new Set([...post.brief.canonIds, ...post.brief.factIds]);
+  const { redact: R, report: redactionReport } = makeRedactor(input.entries, new Set(input.includeInternalIds ?? []));
 
   const world = included.filter((e) => KIND_DOMAIN[e.kind] === "world");
   const style = included.filter((e) => KIND_DOMAIN[e.kind] === "style");
@@ -176,33 +207,33 @@ export function buildPrompt(input: PromptInput): PromptPackage {
   const parts: string[] = [];
   parts.push(`# ゲーム\n名前: ${project.name}\n識別語: ${s.identityAnchors.join(" / ") || "（未設定）"}\n一言説明: ${s.oneLiner || "（未設定）"}`);
   parts.push(
-    `# 今回の投稿\n種類: ${POST_TYPE_LABEL[post.type]}\n目的: ${post.brief.purpose || "（未記入）"}\n読者: ${post.brief.audience || "（未記入）"}\n言語: ${post.brief.language === "en" ? "英語（各セグメントに日本語の意味 jaGloss を付ける）" : "日本語"}\n語り: ${
+    `# 今回の投稿\n種類: ${POST_TYPE_LABEL[post.type]}\n目的: ${R(post.brief.purpose, "企画") || "（未記入）"}\n読者: ${R(post.brief.audience, "企画") || "（未記入）"}\n言語: ${post.brief.language === "en" ? "英語（各セグメントに日本語の意味 jaGloss を付ける）" : "日本語"}\n語り: ${
       post.brief.voice === "in_world" ? "世界内の語り" : post.brief.voice === "developer" ? "開発者の語り" : "両方（セグメントごとに分ける）"
-    }\nメモ: ${post.brief.notes || "なし"}${post.brief.seriesName ? `\n連載名: ${post.brief.seriesName}` : ""}`,
+    }\nメモ: ${R(post.brief.notes, "企画") || "なし"}${post.brief.seriesName ? `\n連載名: ${R(post.brief.seriesName, "企画")}` : ""}`,
   );
   parts.push(
     `# 表現の設定\n絵文字: ${opt.emoji === "none" ? "使わない" : opt.emoji === "few" ? `${opt.maxEmoji} 個まで` : "自由"}\nハッシュタグ: ${opt.maxHashtags} 個まで（使ってよいもの: ${opt.hashtags.join(" ") || "なし"}）\n行動の呼びかけ（CTA）: ${
       opt.cta === "none" ? "入れない" : opt.cta === "soft" ? "控えめに一言まで" : `入れる${opt.ctaText ? `（文言: ${opt.ctaText}）` : ""}`
     }\n避ける宣伝文句: ${banned.slice(0, 30).join(" / ")}`,
   );
-  if (angle) parts.push(`# 選んだ切り口\n${angle.title}\n${angle.approach}`);
+  if (angle) parts.push(`# 選んだ切り口\n${R(angle.title, "切り口")}\n${R(angle.approach, "切り口")}`);
   const fmt = (xs: Entry[]) => xs.map((e) => entryBlock(e, chosen)).join("\n") || "（なし）";
   parts.push(`# 世界の設定（創作）\n${fmt(world)}`);
   parts.push(`# 語り口・表現・投稿例\n${fmt(style)}`);
   parts.push(`# 現実の事実（機能・実績・告知）\n${fmt(reality)}`);
   if (doNotUse.length) parts.push(`# 使わない語（廃止した設定）\n${doNotUse.join(" / ")}`);
   if (assets.length) {
-    parts.push(`# 添付予定の素材（説明のみ）\n${assets.map((a) => `- ${a.title}: ${a.description || "（説明なし）"}${a.altText ? ` / ALT: ${a.altText}` : ""}`).join("\n")}`);
+    parts.push(`# 添付予定の素材（説明のみ）\n${assets.map((a) => `- ${R(a.title, "素材の説明")}: ${R(a.description, "素材の説明") || "（説明なし）"}${a.altText ? ` / ALT: ${R(a.altText, "素材の説明")}` : ""}`).join("\n")}`);
   }
   if (learnings.length) {
-    parts.push(`# これまでの学び（採用・却下の理由）\n${learnings.map((l) => `- ${l.kind === "do" ? "する" : "しない"}: ${l.text}`).join("\n")}`);
+    parts.push(`# これまでの学び（採用・却下の理由）\n${learnings.map((l) => `- ${l.kind === "do" ? "する" : "しない"}: ${R(l.text, "学び")}`).join("\n")}`);
   }
   if (continues.length) {
     parts.push(
       `# 続き元の投稿（この続きを書く）\n${continues
         .map((p) => {
           const d = currentDraft(p);
-          return `- 「${p.title}」${p.status === "posted" ? "（投稿済み）" : "（未投稿）"}:\n${d ? draftPlainText(d) : ""}`;
+          return `- 「${R(p.title, "続き元の投稿")}」${p.status === "posted" ? "（投稿済み）" : "（未投稿）"}:\n${d ? R(draftPlainText(d), "続き元の投稿") : ""}`;
         })
         .join("\n")}`,
     );
@@ -212,7 +243,7 @@ export function buildPrompt(input: PromptInput): PromptPackage {
       `# 最近の投稿（同じ言い回し・同じ構成を繰り返さない）\n${recent
         .map((p) => {
           const d = currentDraft(p);
-          return `- ${(p.publication?.postedText || (d ? draftPlainText(d) : "")).replace(/\n/g, " / ").slice(0, 240)}`;
+          return `- ${R((p.publication?.postedText || (d ? draftPlainText(d) : "")).replace(/\n/g, " / ").slice(0, 240), "最近の投稿")}`;
         })
         .join("\n")}`,
     );
@@ -220,10 +251,10 @@ export function buildPrompt(input: PromptInput): PromptPackage {
   if (task === "draft") {
     const cur = currentDraft(post);
     if (cur && cur.segments.some((x) => x.text.trim())) {
-      parts.push(`# 現在の下書き（参考。改善してよい）\n${draftPlainText(cur)}`);
+      parts.push(`# 現在の下書き（参考。改善してよい）\n${R(draftPlainText(cur), "現在の下書き")}`);
     }
   }
-  if (input.extraInstruction?.trim()) parts.push(`# 追加の指示\n${input.extraInstruction.trim()}`);
+  if (input.extraInstruction?.trim()) parts.push(`# 追加の指示\n${R(input.extraInstruction.trim(), "追加の指示")}`);
 
   if (task === "angles") {
     parts.push(
@@ -243,6 +274,7 @@ export function buildPrompt(input: PromptInput): PromptPackage {
     user,
     included: included.map((e) => item(e)),
     excluded: exclusionItems,
+    redactions: redactionReport(),
     chars: SYSTEM_RULES.length + user.length,
     hash: fnv1a(SYSTEM_RULES + "\n" + user),
   };

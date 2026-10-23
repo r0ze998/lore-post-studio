@@ -149,7 +149,11 @@ export default function SettingsPage() {
                       {l.usage ? `${l.usage.inputTokens}/${l.usage.outputTokens} tok` : "-"}
                       {l.estimatedCostUsd !== undefined && ` · 約 $${l.estimatedCostUsd.toFixed(3)}`}
                     </td>
-                    <td>{l.ok ? <Badge tone="ok">成功</Badge> : <Badge tone="danger" title={l.error}>失敗</Badge>}</td>
+                    <td>
+                      {l.ok ? <Badge tone="ok">成功</Badge> : <Badge tone="danger" title={l.error}>失敗</Badge>}
+                      {l.note && <div className="text-[12px] text-muted">{l.note}</div>}
+                      {!l.ok && l.error && <div className="text-[12px] text-danger">{l.error}</div>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

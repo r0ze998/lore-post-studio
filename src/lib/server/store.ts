@@ -15,6 +15,7 @@ import path from "node:path";
 import { z } from "zod";
 import {
   Asset,
+  AssetMime,
   Decision,
   Entry,
   EntrySnapshot,
@@ -69,7 +70,13 @@ async function readJson<T>(file: string, schema: z.ZodType<T>, fallback: T): Pro
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return fallback;
     throw e;
   }
-  const parsed = schema.safeParse(JSON.parse(raw));
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new StoreError(`保存データが壊れています（JSON として読めません）: ${path.relative(dataDir(), file)}`, 500);
+  }
+  const parsed = schema.safeParse(json);
   if (!parsed.success) {
     throw new StoreError(`保存データの形式が不正です: ${path.basename(file)}: ${parsed.error.issues[0]?.message ?? ""}`, 500);
   }
@@ -176,6 +183,12 @@ export async function ensureSeeded(): Promise<void> {
   return seedPromise;
 }
 
+let brokenProjects: { id: string; error: string }[] = [];
+/** 直近の一覧取得で読めなかったプロジェクト。 */
+export function getBrokenProjects() {
+  return brokenProjects;
+}
+
 export async function listProjects(): Promise<Project[]> {
   await ensureSeeded();
   const root = path.join(dataDir(), "projects");
@@ -186,10 +199,16 @@ export async function listProjects(): Promise<Project[]> {
     return [];
   }
   const out: Project[] = [];
+  brokenProjects = [];
   for (const n of names) {
     if (!SAFE_ID.test(n)) continue;
-    const p = await readJson(path.join(root, n, "project.json"), Project.nullable(), null);
-    if (p) out.push(p);
+    try {
+      const p = await readJson(path.join(root, n, "project.json"), Project.nullable(), null);
+      if (p) out.push(p);
+    } catch (e) {
+      // 1 つ壊れていても、ほかのプロジェクトは使えるようにする
+      brokenProjects.push({ id: n, error: e instanceof Error ? e.message : String(e) });
+    }
   }
   // 実プロジェクトを先、サンプルを後に
   return out.sort((a, b) => (a.kind === b.kind ? a.createdAt.localeCompare(b.createdAt) : a.kind === "real" ? -1 : 1));
@@ -337,6 +356,8 @@ export async function importEntriesAsProposed(projectId: string, inputs: unknown
         id: newId("ent"),
         projectId,
         status: r.status === "deprecated" ? "deprecated" : "proposed",
+        // 過去資料は未公開の情報を含みやすいので、指定がなければ「未公開」で入れる
+        visibility: r.visibility === "public" ? "public" : "internal",
         source: { label: r.source?.label || sourceLabel, url: r.source?.url ?? "", note: r.source?.note ?? "" },
         createdAt: now,
         updatedAt: now,
@@ -357,14 +378,7 @@ export async function importEntriesAsProposed(projectId: string, inputs: unknown
 
 export const listAssets = (projectId: string) => readCollection(projectId, "assets");
 
-const ALLOWED_MIME = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-  "video/mp4",
-  "video/quicktime",
-]);
+const ALLOWED_MIME = new Set<string>(AssetMime.options);
 export const MAX_ASSET_BYTES = 200 * 1024 * 1024;
 
 function extFor(mime: string, filename: string): string {
@@ -380,8 +394,7 @@ export async function createAsset(projectId: string, file: { name: string; type:
     const now = nowIso();
     const assetId = newId("ast");
     const storedName = `${assetId}${extFor(file.type, file.name)}`;
-    await fs.mkdir(path.join(projectDir(projectId), "assets"), { recursive: true });
-    await fs.writeFile(path.join(projectDir(projectId), "assets", storedName), file.data);
+    // 先に記録を検証してから書く（検証に失敗したときにファイルだけ残らないように）
     const asset = Asset.parse({
       ...meta,
       id: assetId,
@@ -394,6 +407,8 @@ export async function createAsset(projectId: string, file: { name: string; type:
       createdAt: now,
       updatedAt: now,
     });
+    await fs.mkdir(path.join(projectDir(projectId), "assets"), { recursive: true });
+    await fs.writeFile(path.join(projectDir(projectId), "assets", storedName), file.data);
     items.push(asset);
     return asset;
   });
@@ -487,6 +502,8 @@ export async function updatePost(projectId: string, postId: string, input: unkno
       throw new StoreError("別の画面でこの投稿が更新されています。再読み込みしてください。", 409);
     }
     const patch = input as Partial<Post>;
+    const draftChanged = (a: Post, b: Post) =>
+      a.currentDraftId !== b.currentDraftId || JSON.stringify(a.drafts.find((d) => d.id === a.currentDraftId)) !== JSON.stringify(b.drafts.find((d) => d.id === b.currentDraftId));
     const next = Post.parse({
       ...prev,
       ...patch,
@@ -496,15 +513,46 @@ export async function updatePost(projectId: string, postId: string, input: unkno
       // 以下は専用操作でのみ変更
       decisions: prev.decisions,
       publication: prev.publication,
-      status: patch.status && ["idea", "drafting", "review", "archived"].includes(patch.status) ? patch.status : prev.status,
+      status: prev.status,
       updatedAt: nowIso(),
     });
-    // 承認後に本文を変えたら承認を外す（承認した版と違うものを出さないため）
-    const prevDraft = prev.drafts.find((d) => d.id === prev.currentDraftId);
-    const nextDraft = next.drafts.find((d) => d.id === next.currentDraftId);
-    if (prev.status === "approved" && JSON.stringify(prevDraft) !== JSON.stringify(nextDraft)) {
-      next.status = "review";
+    // 投稿済みの記録がある投稿は、記録と本文がずれないよう本文・版を固定する
+    if (prev.status === "posted") {
+      if (draftChanged(prev, next) || JSON.stringify(prev.drafts) !== JSON.stringify(next.drafts)) {
+        throw new StoreError("投稿済みの記録がある投稿の本文は変更できません。記録を取り消してから編集するか、複製して新しい投稿にしてください。", 409);
+      }
     }
+    // 状態の変更は決められた遷移だけ許す（承認・却下・投稿記録は専用操作）
+    const want = patch.status;
+    if (want && want !== prev.status) {
+      const editable = ["idea", "drafting", "review", "archived"] as const;
+      const allowed =
+        prev.status === "posted"
+          ? false
+          : prev.status === "approved"
+            ? want === "archived"
+            : (editable as readonly string[]).includes(want);
+      if (allowed) next.status = want;
+      // 状態だけを変える要求なら、許されない遷移はエラーとして返す（本文の保存に付いてきた古い状態は無視する）
+      else if (Object.keys(patch).length === 1) throw new StoreError(`「${prev.status}」から「${want}」へは変更できません`, 409);
+    }
+    // 承認後に本文を変えたら承認を外す（承認した版と違うものを出さないため）。却下後に直したら下書きに戻す
+    if (prev.status === "approved" && draftChanged(prev, next)) next.status = "review";
+    if (prev.status === "rejected" && draftChanged(prev, next)) next.status = "drafting";
+    items[idx] = next;
+    return next;
+  });
+}
+
+/** 生成結果などを、その時点の最新の投稿に追記する（読み込みから書き込みまでの間の更新を消さない）。 */
+export async function appendToPost(projectId: string, postId: string, fn: (current: Post) => Post): Promise<Post> {
+  return mutateCollection(projectId, "posts", (items) => {
+    const idx = items.findIndex((p) => p.id === postId);
+    if (idx < 0) throw new StoreError("投稿が見つかりません", 404);
+    const prev = items[idx];
+    if (prev.status === "posted") throw new StoreError("投稿済みの記録がある投稿には追加できません", 409);
+    const next = Post.parse({ ...fn(prev), id: prev.id, projectId, decisions: prev.decisions, publication: prev.publication, createdAt: prev.createdAt, updatedAt: nowIso() });
+    if (prev.status === "approved" && next.currentDraftId !== prev.currentDraftId) next.status = "review";
     items[idx] = next;
     return next;
   });
@@ -670,13 +718,42 @@ export async function importBundle(raw: unknown, files: Map<string, Buffer>, mod
   }
   const bundle = parsed.data;
   if (mode === "replace") {
-    if (!SAFE_ID.test(bundle.project.id)) throw new StoreError("不正なプロジェクト ID です");
-    if (await exists(projectDir(bundle.project.id))) {
-      await deleteProject(bundle.project.id);
-    }
-    return importBundleRaw(bundle, files, { forceId: bundle.project.id });
+    const pid = bundle.project.id;
+    if (!SAFE_ID.test(pid)) throw new StoreError("不正なプロジェクト ID です");
+    // まず一時フォルダに完全に書き出し、成功してから旧データを退避して差し替える
+    const tmpId = `tmp-${Date.now().toString(36)}`;
+    await writeBundleTo(path.join(dataDir(), "staging", tmpId), bundle, files, pid, bundle.project.name);
+    return withLock(pid, async () => {
+      const dir = projectDir(pid);
+      if (await exists(dir)) {
+        const trash = path.join(dataDir(), "trash");
+        await fs.mkdir(trash, { recursive: true });
+        await fs.rename(dir, path.join(trash, `${pid}-${Date.now()}`));
+      }
+      await fs.rename(path.join(dataDir(), "staging", tmpId), dir);
+      return (await getProject(pid))!;
+    });
   }
   return importBundleRaw(bundle, files, {});
+}
+
+async function writeBundleTo(dir: string, bundle: ProjectBundle, files: Map<string, Buffer>, pid: string, name: string): Promise<Project> {
+  await fs.mkdir(path.join(dir, "assets"), { recursive: true });
+  const project: Project = { ...bundle.project, id: pid, name, updatedAt: nowIso() };
+  const re = <T extends { projectId: string }>(xs: T[]) => xs.map((x) => ({ ...x, projectId: pid }));
+  const assets = re(bundle.assets);
+  for (const a of assets) {
+    const buf = files.get(a.storedName);
+    if (!buf) continue;
+    await fs.writeFile(path.join(dir, "assets", a.storedName), buf);
+  }
+  await writeJson(path.join(dir, "project.json"), Project.parse(project));
+  await writeJson(path.join(dir, "entries.json"), z.array(Entry).parse(re(bundle.entries)));
+  await writeJson(path.join(dir, "assets.json"), z.array(Asset).parse(assets));
+  await writeJson(path.join(dir, "posts.json"), z.array(Post).parse(re(bundle.posts)));
+  await writeJson(path.join(dir, "learnings.json"), z.array(Learning).parse(re(bundle.learnings)));
+  await writeJson(path.join(dir, "sendlog.json"), z.array(SendLogEntry).parse(bundle.sendLog ?? []));
+  return project;
 }
 
 async function importBundleRaw(bundle: ProjectBundle, files: Map<string, Buffer>, opts: { forceId?: string }): Promise<Project> {
@@ -686,26 +763,7 @@ async function importBundleRaw(bundle: ProjectBundle, files: Map<string, Buffer>
     pid = newId("prj");
     name = `${name}（取り込み）`;
   }
-  return withLock(pid, async () => {
-    const dir = projectDir(pid);
-    await fs.mkdir(path.join(dir, "assets"), { recursive: true });
-    const project: Project = { ...bundle.project, id: pid, name, updatedAt: nowIso() };
-    const re = <T extends { projectId: string }>(xs: T[]) => xs.map((x) => ({ ...x, projectId: pid }));
-    const assets = re(bundle.assets);
-    for (const a of assets) {
-      const buf = files.get(a.storedName);
-      if (!buf) continue;
-      if (!SAFE_ID.test(a.storedName.replace(/\.[a-z0-9]+$/i, ""))) continue;
-      await fs.writeFile(path.join(dir, "assets", a.storedName), buf);
-    }
-    await writeJson(path.join(dir, "project.json"), Project.parse(project));
-    await writeJson(path.join(dir, "entries.json"), z.array(Entry).parse(re(bundle.entries)));
-    await writeJson(path.join(dir, "assets.json"), z.array(Asset).parse(assets));
-    await writeJson(path.join(dir, "posts.json"), z.array(Post).parse(re(bundle.posts)));
-    await writeJson(path.join(dir, "learnings.json"), z.array(Learning).parse(re(bundle.learnings)));
-    await writeJson(path.join(dir, "sendlog.json"), z.array(SendLogEntry).parse(bundle.sendLog ?? []));
-    return project;
-  });
+  return withLock(pid, () => writeBundleTo(projectDir(pid), bundle, files, pid, name));
 }
 
 /** サンプルプロジェクトを初期状態に戻す（Wylls など他のプロジェクトには触れない）。 */

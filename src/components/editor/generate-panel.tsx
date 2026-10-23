@@ -101,13 +101,19 @@ export function GeneratePanel({ task, post, angleId, ensureSaved, onDone }: { ta
 
       <Modal
         open={!!preview}
-        onClose={() => setPreview(null)}
+        onClose={() => {
+          // 送信中は閉じない（閉じて編集を続けると結果の取り込みと競合するため）
+          if (busy) return;
+          setPreview(null);
+          // 「今回だけ送る」の選択は次回に持ち越さない
+          setIncludeInternal([]);
+        }}
         wide
         title={provider === "relay" ? "手動中継：送る内容" : "送信内容の確認"}
         footer={
           preview && provider === "anthropic" ? (
             <>
-              <Button onClick={() => setPreview(null)}>やめる</Button>
+              <Button disabled={busy} onClick={() => { setPreview(null); setIncludeInternal([]); }}>やめる</Button>
               <Button
                 variant="primary"
                 disabled={busy || !preview.allowExternal}
@@ -115,6 +121,7 @@ export function GeneratePanel({ task, post, angleId, ensureSaved, onDone }: { ta
                   const r = await run(() => api<Post>(base, { body: body("run", { confirmHash: preview.prompt.hash }) }), "生成結果を追加しました");
                   if (r) {
                     setPreview(null);
+                    setIncludeInternal([]);
                     onDone(r);
                     await reload();
                   }
@@ -125,7 +132,7 @@ export function GeneratePanel({ task, post, angleId, ensureSaved, onDone }: { ta
             </>
           ) : preview ? (
             <>
-              <Button onClick={() => setPreview(null)}>閉じる</Button>
+              <Button onClick={() => { setPreview(null); setIncludeInternal([]); }}>閉じる</Button>
               <Button
                 variant="primary"
                 disabled={busy || !pasted.trim()}
@@ -134,6 +141,7 @@ export function GeneratePanel({ task, post, angleId, ensureSaved, onDone }: { ta
                   if (r) {
                     setPasted("");
                     setPreview(null);
+                    setIncludeInternal([]);
                     onDone(r);
                     await reload();
                   }
@@ -168,6 +176,9 @@ export function GeneratePanel({ task, post, angleId, ensureSaved, onDone }: { ta
                     )}
                   </Notice>
                 )}
+                <Notice tone="info" title="フォールバックについて">
+                  モデルが安全上の理由で応答を断った場合、Anthropic 側で別のモデル（例：Claude Opus 5、入力 $5 / 出力 $25 per 100 万トークン）に自動で切り替えて再実行することがあります。その場合は切り替え先の料金になり、上の概算より高くなることがあります。切り替えが起きたかは送信記録に残ります。
+                </Notice>
                 <Notice tone="warn" title="保存方針">
                   送信した内容は Anthropic のデータ保持方針に従って保存される場合があります。このツールは送信記録（日時・送った項目 ID・使用量）をこのコンピューターに保存し、プロジェクト設定の「送信記録」で確認できます。API キーはサーバー側だけで使い、画面には出しません。
                 </Notice>
@@ -185,7 +196,7 @@ export function GeneratePanel({ task, post, angleId, ensureSaved, onDone }: { ta
                 <ul className="mt-1 max-h-48 overflow-y-auto text-[13px]" data-testid="included-list">
                   {preview.prompt.included.map((i) => (
                     <li key={i.id} className="border-b border-line py-0.5">
-                      <Badge>{i.kind}</Badge> {i.title} <span className="text-muted">（{i.status}）</span>
+                      <Badge>{i.kind}</Badge> {i.internal && <Badge tone="danger">未公開・今回送る</Badge>} {i.title} <span className="text-muted">（{i.status}）</span>
                     </li>
                   ))}
                 </ul>
@@ -202,6 +213,11 @@ export function GeneratePanel({ task, post, angleId, ensureSaved, onDone }: { ta
               </div>
             </div>
 
+            {preview.prompt.redactions.length > 0 && (
+              <Notice tone="info" title="未公開の名前を伏せ字にしました" >
+                {preview.prompt.redactions.map((r) => `${r.where} ${r.count} 箇所`).join("、")}。名前を出さずに未公開の内容を書いた文は判別できないので、全文を確認してください。
+              </Notice>
+            )}
             {internalEntries.length > 0 && (
               <details className="rounded-md border border-line p-2 text-sm">
                 <summary className="cursor-pointer font-semibold">未公開の項目を今回だけ送る（既定は送らない）</summary>

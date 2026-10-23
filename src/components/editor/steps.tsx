@@ -289,9 +289,11 @@ export function DraftStep({ post, setPost, draft, save, onServerPost, report }: 
     updateDraft({ ...draft, segments: segs });
   };
   const approved = post.decisions.some((d) => d.kind === "approved" && d.draftId === draft.id);
+  const locked = post.status === "posted";
 
   return (
-    <div className="flex flex-col gap-4">
+    <fieldset disabled={locked} className="flex min-w-0 flex-col gap-4">
+      {locked && <Notice tone="info">投稿済みの記録があるため、本文と版は変更できません（記録と本文がずれないようにするため）。直す場合は「7 記録」で記録を取り消してください。</Notice>}
       <div className="flex flex-wrap items-end gap-2">
         <Field label="版" htmlFor="d-version" className="min-w-60 flex-1">
           <Select
@@ -414,7 +416,7 @@ export function DraftStep({ post, setPost, draft, save, onServerPost, report }: 
       <Field label="創作メモ（設定にない部分・創作した部分）" htmlFor="d-notes" hint="例：井戸の数は今回の創作。承認後に「出来事」として正本に提案できます。">
         <Textarea id="d-notes" rows={3} value={draft.creativeNotes} onChange={(e) => updateDraft({ ...draft, creativeNotes: e.target.value })} />
       </Field>
-      <GeneratePanel task="draft" post={post} angleId={post.chosenAngleId} ensureSaved={save} onDone={onServerPost} />
+      {!locked && <GeneratePanel task="draft" post={post} angleId={post.chosenAngleId} ensureSaved={save} onDone={onServerPost} />}
 
       <AssetPicker
         open={assetPickFor !== null}
@@ -423,7 +425,7 @@ export function DraftStep({ post, setPost, draft, save, onServerPost, report }: 
         onClose={() => setAssetPickFor(null)}
         onChange={(ids) => assetPickFor !== null && updateSeg(assetPickFor, { assetIds: ids })}
       />
-    </div>
+    </fieldset>
   );
 }
 

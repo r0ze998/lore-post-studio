@@ -34,6 +34,19 @@ describe("送る資料の選択", () => {
     expect(pkg.included.some((i) => i.id === "ent_s_chr_luka")).toBe(true);
   });
 
+  it("学び・企画メモ・過去の下書きに書かれた未公開の名前は伏せ字にし、伏せた場所を返す", () => {
+    const i = input({ brief: { notes: "交易商ルカの登場をにおわせる" } });
+    i.learnings = [...i.learnings, { id: "lrn_x", projectId: "sample-saltroad", kind: "dont", text: "ルカ（未公開）を出さない", pattern: "", origin: "rejection", postId: "", active: true, createdAt: "x" }];
+    const pkg = buildPrompt(i);
+    expect(pkg.user).not.toMatch(/ルカ|Luka/);
+    expect(pkg.user).toContain("［未公開のため伏せ字］");
+    expect(pkg.redactions.map((r) => r.where).sort()).toEqual(["企画", "学び"]);
+    // 本人が今回だけ送ると選んだら伏せない
+    const opted = buildPrompt({ ...i, includeInternalIds: ["ent_s_chr_luka"] });
+    expect(opted.user).toContain("交易商ルカ");
+    expect(opted.included.find((x) => x.id === "ent_s_chr_luka")?.internal).toBe(true);
+  });
+
   it("他のプロジェクトのデータは入らない（入力にない）", () => {
     const pkg = buildPrompt(input());
     expect(pkg.user).not.toContain("Wylls");

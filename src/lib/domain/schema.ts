@@ -235,12 +235,15 @@ export type Entry = z.infer<typeof Entry>;
 
 export const AssetRights = z.enum(["own", "licensed", "unknown"]);
 
+/** 受け付ける素材の形式（取り込みファイル経由で HTML などが紛れ込まないよう、ここで固定する）。 */
+export const AssetMime = z.enum(["image/png", "image/jpeg", "image/gif", "image/webp", "video/mp4", "video/quicktime"]);
+
 export const Asset = z.object({
   id,
   projectId: id,
   filename: z.string(),
-  storedName: z.string(),
-  mime: z.string(),
+  storedName: z.string().regex(/^[A-Za-z0-9_-]{1,64}\.[a-z0-9]{1,5}$/),
+  mime: AssetMime,
   size: z.number().int().nonnegative(),
   title: z.string().default(""),
   description: z.string().default(""),
@@ -463,6 +466,8 @@ export const SendLogEntry = z.object({
   estimatedCostUsd: z.number().optional(),
   ok: z.boolean(),
   error: z.string().default(""),
+  /** フォールバックなどの補足。 */
+  note: z.string().default(""),
 });
 export type SendLogEntry = z.infer<typeof SendLogEntry>;
 

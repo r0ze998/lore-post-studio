@@ -31,6 +31,7 @@ import { countX, extractUrlsWithIndices, type XCount } from "./xcount";
 import type { RuleId } from "./catalog";
 import {
   ABSTRACT_WORDS,
+  AMBIGUOUS_DEVELOPER_MARKERS,
   ASSERT_AVAILABLE,
   CANCEL_WORDS,
   CLAIM_PATTERNS,
@@ -145,6 +146,8 @@ export function parseNumber(s: string): number | null {
 }
 
 const NUM_UNIT_RE = /([\d０-９][\d,０-９]*(?:\.\d+)?|[〇零一二三四五六七八九十百千万]+)\s*(年前|年|日目|日|人|名|枚|個|頭|隻|km|キロ|メートル|里|歳|つ|本|軒|基)/gu;
+
+const COUNTERS_ONE = new Set(["つ", "人", "名", "本", "個", "枚", "頭", "隻", "軒", "基"]);
 
 function numberUnits(text: string): { value: number; unit: string; range: Range; raw: string }[] {
   const out: { value: number; unit: string; range: Range; raw: string }[] = [];
@@ -424,10 +427,14 @@ export function runChecks(ctx: CheckContext, post: Post, draft: DraftVersion, no
       if (!nums.length) continue;
       for (const e of activeEntries) {
         if (e.status !== "confirmed" || KIND_DOMAIN[e.kind] === "style") continue;
-        const mentioned = namesOf(e).some((n) => findAll(s.text, n).length > 0);
-        if (!mentioned) continue;
+        const nameRanges = namesOf(e).flatMap((n) => findAll(s.text, n));
+        if (!nameRanges.length) continue;
         const canonNums = numberUnits(entryFullText(e));
         for (const n of nums) {
+          // 「一つ」「一人」などの言い回しは数の主張でないことが多いので除く
+          if (n.value === 1 && COUNTERS_ONE.has(n.unit)) continue;
+          // 設定名の近く（20 文字以内）の数だけ比べる
+          if (!nameRanges.some((r) => Math.abs(r.start - n.range.start) <= 20 || Math.abs(n.range.start - r.end) <= 20)) continue;
           const sameUnit = canonNums.filter((c) => c.unit === n.unit);
           if (!sameUnit.length || sameUnit.some((c) => c.value === n.value)) continue;
           add({
@@ -499,7 +506,8 @@ export function runChecks(ctx: CheckContext, post: Post, draft: DraftVersion, no
         const r = absRange({ start: m.index ?? 0, end: (m.index ?? 0) + m[0].length });
         // 世界内の語りの本文では、作中の数値（旅人 3 人など）を実績と見なさない
         if (isInWorldBody(v, r) && cp.type !== "award" && cp.type !== "partnership") continue;
-        const numbers = (m[0].match(/[\d０-９][\d,０-９.]*/g) ?? []).map((x) => foldWidth(x).replace(/,/g, ""));
+        const numSource = cp.type === "prize" ? (s.text.match(/[$＄]?\s?[\d０-９][\d,０-９.]*\s?(?:万円|円|ドル|USD|USDC|ETH|STRK)?/gu) ?? []).join(" ") : m[0];
+        const numbers = (numSource.match(/[\d０-９][\d,０-９.]*/g) ?? []).map((x) => foldWidth(x).replace(/,/g, ""));
         const support = entries.filter((e) => {
           if (e.status !== "confirmed") return false;
           if (e.kind === "claim") {
@@ -535,9 +543,12 @@ export function runChecks(ctx: CheckContext, post: Post, draft: DraftVersion, no
       const knownNames = new Set([...settings.identityAnchors, ...activeEntries.flatMap(namesOf)].map(norm));
       const hasQuote = Array.from(s.text.matchAll(/「([^」]+)」|“([^”]+)”|"([^"]+)"/gu)).some((m) => !knownNames.has(norm(m[1] ?? m[2] ?? m[3] ?? "")));
       const subject = s.text.match(TESTIMONIAL_SUBJECT);
-      const verb = TESTIMONIAL_VERB.test(s.text);
+      // 声を表す語は、主語（プレイヤー等）より後ろにあるときだけ数える
+      const after = subject ? s.text.slice((subject.index ?? 0) + subject[0].length) : "";
+      const verb = !!subject && TESTIMONIAL_VERB.test(after);
       const hype = s.text.match(REPUTATION_HYPE);
-      const voiceLike = (subject && (verb || hasQuote)) || hype;
+      const quoteAfter = !!subject && hasQuote && /[「“"]/u.test(after);
+      const voiceLike = (subject && (verb || quoteAfter)) || hype;
       if (voiceLike && !(isInWorldBody(v, s) && !hype)) {
         const consented = entries.filter((e) => e.kind === "testimonial" && e.status === "confirmed" && e.details.consent && e.details.quote.trim().length >= 4);
         const quoted = consented.find((e) => norm(s.text).includes(norm(e.details.quote.trim().slice(0, 30))));
@@ -583,6 +594,20 @@ export function runChecks(ctx: CheckContext, post: Post, draft: DraftVersion, no
     if (v.seg.voice === "in_world") {
       const hits: { r: Range; w: string }[] = [];
       for (const w of devMarkers) for (const r of findAll(v.text, w)) if (!inFrame(v, r)) hits.push({ r, w });
+      const soft: { r: Range; w: string }[] = [];
+      for (const w of AMBIGUOUS_DEVELOPER_MARKERS) for (const r of findAll(v.text, w)) if (!inFrame(v, r) && !hits.some((h) => overlaps(h.r, r))) soft.push({ r, w });
+      if (soft.length) {
+        add({
+          ruleId: "voice-mixing",
+          severity: "info",
+          title: `世界内の語りに開発者の語かもしれない語「${Array.from(new Set(soft.map((h) => h.w))).slice(0, 4).join("」「")}」`,
+          message: "作中の意味（井戸の開発、町の運営など）なら問題ありません。ゲーム開発・サービスの話なら、※注記か開発者の語りに分けてください。",
+          segmentIndex: v.index,
+          ranges: soft.map((h) => h.r),
+          refs: [],
+          keyExtra: "soft",
+        });
+      }
       for (const r of findRegex(v.text, "\\bv\\d+(?:\\.\\d+)+")) if (!inFrame(v, r)) hits.push({ r, w: v.text.slice(r.start, r.end) });
       for (const u of extractUrlsWithIndices(v.text)) if (!inFrame(v, u)) hits.push({ r: u, w: "URL" });
       if (hits.length) {

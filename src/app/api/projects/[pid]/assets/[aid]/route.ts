@@ -14,6 +14,8 @@ export async function GET(req: Request, { params }: RouteCtx<{ pid: string; aid:
         "Content-Length": String(data.length),
         "Cache-Control": "private, max-age=60",
         "X-Content-Type-Options": "nosniff",
+        // 素材が文書として開かれてもスクリプトを動かさない
+        "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self'; media-src 'self'",
         ...(download ? { "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(asset.filename)}` } : {}),
       },
     });

@@ -53,6 +53,7 @@ describe("正本の編集", () => {
   it("資料の一括取り込みは「確定」を指定しても「提案」で入る", async () => {
     const xs = await store.importEntriesAsProposed("wylls", [{ kind: "lore", title: "古い資料の設定", status: "confirmed", body: "..." }], "旧資料 2025");
     expect(xs[0].status).toBe("proposed");
+    expect(xs[0].visibility).toBe("internal");
     expect(xs[0].source.label).toBe("旧資料 2025");
   });
 
@@ -82,8 +83,10 @@ describe("投稿の流れ", () => {
     const ok = await store.decidePost("sample-saltroad", p.id, { kind: "approved", reason: "具体的", draftId: "drf_x" });
     expect(ok.status).toBe("approved");
     // updatePost では承認状態を直接変えられない
-    const tryStatus = await store.updatePost("sample-saltroad", p.id, { status: "posted" });
-    expect(tryStatus.status).toBe("approved");
+    await expect(store.updatePost("sample-saltroad", p.id, { status: "posted" })).rejects.toThrow(/変更できません/);
+    await expect(store.updatePost("sample-saltroad", p.id, { status: "idea" })).rejects.toThrow(/変更できません/);
+    const ignored = await store.updatePost("sample-saltroad", p.id, { status: "idea", title: "t" });
+    expect(ignored.status).toBe("approved");
     const edited = await store.updatePost("sample-saltroad", p.id, {
       drafts: [{ id: "drf_x", createdAt: "x", origin: "manual", language: "ja", segments: [{ id: "seg_x", text: "本文を変更" }] }],
     });
@@ -100,6 +103,26 @@ describe("投稿の流れ", () => {
     expect(r.status).toBe("posted");
     expect(r.publication?.verification).toBe("manual");
     expect(r.publication?.metrics[0].source).toBe("manual");
+  });
+
+  it("投稿済みの記録がある投稿は本文・版を変えられず、生成結果も追加できない", async () => {
+    const posted = (await store.listPosts("sample-saltroad")).find((x) => x.id === "pst_s_story1")!;
+    const d = posted.drafts[0];
+    await expect(
+      store.updatePost("sample-saltroad", posted.id, { drafts: [{ ...d, segments: [{ ...d.segments[0], text: "変更" }] }] }),
+    ).rejects.toThrow(/投稿済み/);
+    await expect(store.appendToPost("sample-saltroad", posted.id, (p) => p)).rejects.toThrow(/投稿済み/);
+    // 予約候補などのメモは変えられる
+    const ok = await store.updatePost("sample-saltroad", posted.id, { title: "ミズハ到着（改題）" });
+    expect(ok.status).toBe("posted");
+  });
+
+  it("却下後に本文を直すと下書きに戻る", async () => {
+    const p = await store.createPost("sample-saltroad", { type: "story", title: "rj" });
+    await store.updatePost("sample-saltroad", p.id, { drafts: [{ id: "drf_r", createdAt: "x", origin: "manual", language: "ja", segments: [{ id: "s", text: "a" }] }], currentDraftId: "drf_r" });
+    await store.decidePost("sample-saltroad", p.id, { kind: "rejected", reason: "抽象的", draftId: "drf_r" });
+    const fixed = await store.updatePost("sample-saltroad", p.id, { drafts: [{ id: "drf_r", createdAt: "x", origin: "manual", language: "ja", segments: [{ id: "s", text: "b" }] }] });
+    expect(fixed.status).toBe("drafting");
   });
 
   it("同じ投稿を別画面で更新していたら衝突として止める", async () => {
@@ -135,6 +158,32 @@ describe("エクスポート・インポート", () => {
 
   it("形式の違うファイルは取り込まない", async () => {
     await expect(store.importBundle({ format: "other" }, new Map(), "new")).rejects.toThrow(/形式/);
+  });
+
+  it("取り込みファイルの素材に許可外の形式（HTML など）があれば取り込まない", async () => {
+    const { bundle } = await store.exportBundle("wylls");
+    const bad = JSON.parse(JSON.stringify(bundle));
+    bad.assets = [{ id: "ast_x", projectId: "wylls", filename: "x.html", storedName: "ast_x.html", mime: "text/html", size: 1, createdAt: "x", updatedAt: "x" }];
+    await expect(store.importBundle(bad, new Map([["ast_x.html", Buffer.from("<script>alert(1)</script>")]]), "new")).rejects.toThrow(/形式が不正/);
+  });
+
+  it("置き換え取り込みが形式エラーなら、元のプロジェクトはそのまま残る", async () => {
+    const before = await store.listEntries("sample-saltroad");
+    const { bundle } = await store.exportBundle("sample-saltroad");
+    const bad = JSON.parse(JSON.stringify(bundle));
+    bad.entries[0].status = "unknown";
+    await expect(store.importBundle(bad, new Map(), "replace")).rejects.toThrow();
+    expect((await store.listEntries("sample-saltroad")).length).toBe(before.length);
+  });
+
+  it("壊れたプロジェクトが 1 つあっても一覧は表示でき、壊れたものを知らせる", async () => {
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    mkdirSync(path.join(dir, "projects", "broken1"), { recursive: true });
+    writeFileSync(path.join(dir, "projects", "broken1", "project.json"), "{ not json");
+    const ps = await store.listProjects();
+    expect(ps.some((p) => p.id === "wylls")).toBe(true);
+    expect(store.getBrokenProjects().map((b) => b.id)).toEqual(["broken1"]);
+    rmSync(path.join(dir, "projects", "broken1"), { recursive: true, force: true });
   });
 
   it("未対応の素材形式は受け付けない", async () => {

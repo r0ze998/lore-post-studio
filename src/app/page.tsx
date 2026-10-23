@@ -8,6 +8,7 @@ import { Badge, Button, Card, Field, Input, Notice, PageHeader, Select, Textarea
 
 export default function Home() {
   const [projects, setProjects] = useState<Project[] | null>(null);
+  const [broken, setBroken] = useState<{ id: string; error: string }[]>([]);
   const [name, setName] = useState("");
   const [kind, setKind] = useState<"real" | "sample">("real");
   const [desc, setDesc] = useState("");
@@ -15,7 +16,11 @@ export default function Home() {
   const fileRef = useRef<HTMLInputElement>(null);
   const { busy, run } = useAsyncAction();
 
-  const load = async () => setProjects((await api<{ projects: Project[] }>("/api/projects")).projects);
+  const load = async () => {
+    const r = await api<{ projects: Project[]; broken: { id: string; error: string }[] }>("/api/projects");
+    setProjects(r.projects);
+    setBroken(r.broken ?? []);
+  };
   useEffect(() => {
     void load();
   }, []);
@@ -32,6 +37,13 @@ export default function Home() {
         }
       />
 
+      {broken.length > 0 && (
+        <div className="mb-3">
+          <Notice tone="danger" title="読み込めないプロジェクトがあります">
+            {broken.map((b) => `${b.id}: ${b.error}`).join(" / ")}。data フォルダのファイルを確認するか、書き出した zip から取り込み直してください。
+          </Notice>
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         {projects === null && <p className="text-muted">読み込み中…</p>}
         {projects?.map((p) => (
