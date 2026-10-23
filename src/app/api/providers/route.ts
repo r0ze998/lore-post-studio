@@ -1,7 +1,7 @@
 import { handle } from "@/lib/server/http";
 import { listProviders } from "@/lib/server/providers";
 import { MODEL_PRICES, PRICING_AS_OF } from "@/lib/generation/pricing";
-import { dataDir } from "@/lib/server/store";
+import { storageInfo } from "@/lib/server/store";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,8 @@ export async function GET() {
     providers: listProviders(),
     prices: MODEL_PRICES,
     pricingAsOf: PRICING_AS_OF,
-    dataDir: dataDir(),
+    storage: await storageInfo(),
+    deployed: !!process.env.VERCEL,
     passcode: !!process.env.APP_PASSCODE,
   }));
 }

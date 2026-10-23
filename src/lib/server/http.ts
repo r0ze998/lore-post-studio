@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { StoreError } from "./store";
+import { ConfigError } from "./backend/types";
 
 export function json(data: unknown, status = 200) {
   return NextResponse.json(data, { status, headers: { "Cache-Control": "no-store" } });
@@ -8,6 +9,7 @@ export function json(data: unknown, status = 200) {
 
 export function errorResponse(e: unknown) {
   if (e instanceof StoreError) return json({ error: e.message }, e.status);
+  if (e instanceof ConfigError) return json({ error: `設定が足りません：${e.message}` }, 500);
   if (e instanceof ZodError) {
     const i = e.issues[0];
     return json({ error: `入力が不正です: ${i?.path.join(".")} ${i?.message ?? ""}` }, 400);

@@ -6,7 +6,11 @@ X には接続しません（ログイン・API・自動投稿・予約投稿の
 - 対象：まず Wylls（設定は未登録の空プロジェクト）。開発・検証用に **架空のサンプル「塩の街道 / Salt Road」** を別プロジェクトとして同梱。
 - プロジェクトはデータの保存先から完全に分離されています（`data/projects/<id>/`）。生成・検査は開いているプロジェクトのデータしか読みません。
 
-## 起動
+## Web で使う（Vercel ＋ Supabase）
+
+ブラウザだけで使いたい場合は [docs/DEPLOY.md](docs/DEPLOY.md) の手順でデプロイできます（無料枠で開始可、合言葉ログイン必須）。
+
+## 起動（PC で使う）
 
 ```bash
 npm install
@@ -28,6 +32,7 @@ APP_PASSCODE=好きな合言葉 npm run start:lan   # 0.0.0.0:3000、Basic 認�
 | 変数 | 用途 |
 | --- | --- |
 | `DATA_DIR` | データ保存先（既定 `./data`） |
+| `STORAGE_BACKEND` | `supabase` で Web 用の保存先（DEPLOY.md 参照）。未設定ならローカルファイル |
 | `ANTHROPIC_API_KEY` | Anthropic API を使う場合のみ。サーバー側でだけ読み、画面には出しません |
 | `ANTHROPIC_MODEL` | 既定 `claude-opus-5-5` |
 | `APP_PASSCODE` | LAN 利用時の Basic 認証 |
@@ -87,7 +92,8 @@ APP_PASSCODE=好きな合言葉 npm run start:lan   # 0.0.0.0:3000、Basic 認�
 
 ## データ・バックアップ
 
-- `data/projects/<id>/` に JSON と素材ファイル。書き込みは一時ファイル経由（途中で落ちても壊れたファイルを残さない）。
+- PC 版：`data/projects/<id>/` に JSON と素材ファイル。書き込みは一時ファイル経由（途中で落ちても壊れたファイルを残さない）。
+- Web 版：Supabase の Postgres（文書）と非公開の Storage バケット（素材）。同時更新は版番号の照合で検出して再試行します。
 - 削除・置き換えたデータは `data/trash/` に退避（自動では消しません）。
 - プロジェクト設定 →「プロジェクトを zip で書き出す」でバックアップ。トップ画面から取り込み（既存プロジェクトに混ぜず、新しいプロジェクトとして追加、または同じ ID を置き換え）。
 
@@ -96,9 +102,13 @@ APP_PASSCODE=好きな合言葉 npm run start:lan   # 0.0.0.0:3000、Basic 認�
 ```bash
 npm test          # 単体テスト（検査エンジン・保存・生成の安全装置・取り込み）
 npm run build && npm run e2e   # PC（Chromium 1366x900）とスマホ（Pixel 7 エミュレーション）で通しの E2E
+                               # （PC 版の構成と、Web 版と同じ受け渡し方式の構成の両方）
+# 実際の PostgreSQL での確認（任意）
+PG_TEST_URL=postgres://… npx vitest run tests/unit/store-postgres.test.ts
+PG_E2E_URL=postgres://…/空のDB npm run e2e
 ```
 
-E2E は `.data-e2e/` を使い、`data/` には触れません。
+E2E は `.data-e2e/`・`.data-e2e-web/` を使い、`data/` には触れません。
 
 ## 構成
 

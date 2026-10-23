@@ -10,7 +10,8 @@ interface Info {
   providers: ProviderInfo[];
   prices: Record<string, { label: string; inputPerMTok: number; outputPerMTok: number }>;
   pricingAsOf: string;
-  dataDir: string;
+  storage: { kind: string; description: string };
+  deployed: boolean;
   passcode: boolean;
 }
 
@@ -70,11 +71,11 @@ export default function GlobalSettings() {
           </Card>
           <Card title="データの保存場所">
             <p className="text-sm">
-              <code className="break-all">{info.dataDir}</code>
+              <code className="break-all">{info.storage.description}</code>
             </p>
-            <p className="mt-1 text-[12px] text-muted">プロジェクトごとにフォルダが分かれています。削除・置き換えたデータは trash フォルダに退避されます。定期的にプロジェクトを zip で書き出してバックアップしてください。</p>
+            <p className="mt-1 text-[12px] text-muted">プロジェクトごとにデータが分かれています。削除・置き換えたデータは trash に退避されます（自動では消しません）。定期的にプロジェクトを zip で書き出してバックアップしてください。</p>
           </Card>
-          {!info.passcode && (
+          {!info.passcode && !info.deployed && (
             <Notice tone="warn" title="スマホから LAN 経由で使う場合">
               <code>npm run start:lan</code> で起動すると同じネットワークの端末からアクセスできます。その場合は環境変数 <code>APP_PASSCODE</code> を設定してください（Basic 認証がかかります）。
             </Notice>

@@ -5,6 +5,7 @@ import { useProject } from "@/components/project-context";
 import { Badge, Button, CopyButton, Empty, Field, Input, Modal, Notice, PageHeader, Select, StatusBadge, Textarea, useAsyncAction } from "@/components/ui";
 import type { Asset } from "@/lib/domain/schema";
 import { api, fmtDate } from "@/lib/client/api";
+import { getServerInfo, uploadToSignedUrl } from "@/lib/client/server-info";
 import { imagePrompt } from "@/lib/domain/exporting";
 import { STATUS_LABEL } from "@/lib/domain/labels";
 
@@ -44,9 +45,25 @@ export default function AssetsPage() {
                 const files = Array.from(e.target.files ?? []);
                 e.target.value = "";
                 if (!files.length) return;
-                const form = new FormData();
-                files.forEach((f) => form.append("file", f));
-                const r = await run(() => api(`/api/projects/${data.project.id}/assets`, { form }), `${files.length} 件を追加しました`);
+                const r = await run(async () => {
+                  const info = await getServerInfo();
+                  const max = info.storage.maxAssetBytes;
+                  const tooBig = files.find((f) => f.size > max);
+                  if (tooBig) throw new Error(`「${tooBig.name}」が大きすぎます（${Math.floor(max / 1024 / 1024)}MB まで）`);
+                  if (!info.storage.directTransfer) {
+                    const form = new FormData();
+                    files.forEach((f) => form.append("file", f));
+                    return api(`/api/projects/${data.project.id}/assets`, { form });
+                  }
+                  // Web 版：1 つずつ保存先へ直接送る
+                  for (const f of files) {
+                    const base = `/api/projects/${data.project.id}/assets/upload`;
+                    const prep = await api<{ assetId: string; storedName: string; uploadUrl: string }>(base, { body: { action: "prepare", name: f.name, type: f.type, size: f.size } });
+                    await uploadToSignedUrl(prep.uploadUrl, f);
+                    await api(base, { body: { action: "complete", assetId: prep.assetId, storedName: prep.storedName, name: f.name, type: f.type } });
+                  }
+                  return true;
+                }, `${files.length} 件を追加しました`);
                 if (r) await reload();
               }}
             />
@@ -56,7 +73,7 @@ export default function AssetsPage() {
           </>
         }
       />
-      <Notice tone="info">PNG / JPEG / GIF / WebP / MP4 / MOV（200MB まで）。ファイルはこのコンピューターの data フォルダに保存され、外部モデルには送りません（説明文と代替テキストのみ、許可した場合に送ります）。</Notice>
+      <Notice tone="info">PNG / JPEG / GIF / WebP / MP4 / MOV（PC 版は 200MB、Web 版は 50MB まで）。ファイルはこのツールの保存先にだけ置かれ、外部モデルには送りません（説明文と代替テキストのみ、許可した場合に送ります）。</Notice>
       {data.assets.length === 0 ? (
         <div className="mt-3">
           <Empty>まだ素材がありません。</Empty>

@@ -6,8 +6,11 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request, { params }: RouteCtx<{ pid: string; aid: string }>) {
   try {
     const { pid, aid } = await params;
-    const { asset, data } = await store.readAssetFile(pid, aid);
     const download = new URL(req.url).searchParams.get("download") === "1";
+    // Web 版：保存先の短時間有効な URL へ転送（サーバーを経由しないので大きなファイルも扱える）
+    const signed = await store.assetDownloadUrl(pid, aid, download);
+    if (signed) return Response.redirect(signed, 302);
+    const { asset, data } = await store.readAssetFile(pid, aid);
     return new Response(new Uint8Array(data), {
       headers: {
         "Content-Type": asset.mime,

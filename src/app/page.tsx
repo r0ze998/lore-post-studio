@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { Project } from "@/lib/domain/schema";
 import { api, fmtDate } from "@/lib/client/api";
+import { getServerInfo, uploadToSignedUrl } from "@/lib/client/server-info";
 import { Badge, Button, Card, Field, Input, Notice, PageHeader, Select, Textarea, useAsyncAction } from "@/components/ui";
 
 export default function Home() {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [broken, setBroken] = useState<{ id: string; error: string }[]>([]);
+  const [loadError, setLoadError] = useState("");
   const [name, setName] = useState("");
   const [kind, setKind] = useState<"real" | "sample">("real");
   const [desc, setDesc] = useState("");
@@ -22,7 +24,7 @@ export default function Home() {
     setBroken(r.broken ?? []);
   };
   useEffect(() => {
-    void load();
+    load().catch((e) => setLoadError(e instanceof Error ? e.message : String(e)));
   }, []);
 
   return (
@@ -37,6 +39,13 @@ export default function Home() {
         }
       />
 
+      {loadError && (
+        <div className="mb-3">
+          <Notice tone="danger" title="データを読み込めませんでした">
+            {loadError}
+          </Notice>
+        </div>
+      )}
       {broken.length > 0 && (
         <div className="mb-3">
           <Notice tone="danger" title="読み込めないプロジェクトがあります">
@@ -45,7 +54,7 @@ export default function Home() {
         </div>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
-        {projects === null && <p className="text-muted">読み込み中…</p>}
+        {projects === null && !loadError && <p className="text-muted">読み込み中…</p>}
         {projects?.map((p) => (
           <Link
             key={p.id}
@@ -128,10 +137,19 @@ export default function Home() {
                   e.target.value = "";
                   if (!f) return;
                   if (mode === "replace" && !confirm("同じ ID のプロジェクトを置き換えます。現在のデータは data/trash に退避されます。よろしいですか？")) return;
-                  const form = new FormData();
-                  form.append("file", f);
-                  form.append("mode", mode);
-                  const p = await run(() => api<Project>("/api/import", { form }), "取り込みました");
+                  const p = await run(async () => {
+                    const info = await getServerInfo();
+                    if (info.storage.directTransfer) {
+                      // Web 版：zip を保存先へ直接送ってから取り込む（大きなファイルに対応）
+                      const t = await api<{ key: string; url: string }>("/api/import/upload", { method: "POST" });
+                      await uploadToSignedUrl(t.url, f);
+                      return api<Project>("/api/import", { body: { transferKey: t.key, mode } });
+                    }
+                    const form = new FormData();
+                    form.append("file", f);
+                    form.append("mode", mode);
+                    return api<Project>("/api/import", { form });
+                  }, "取り込みました");
                   if (p) await load();
                 }}
               />

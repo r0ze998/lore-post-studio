@@ -8,14 +8,25 @@ export const dynamic = "force-dynamic";
 /** プロジェクトの取り込み（zip または json）。既存プロジェクトへは混ぜない。 */
 export async function POST(req: Request) {
   return handle(async () => {
-    const form = await req.formData();
-    const file = form.get("file");
-    const mode = form.get("mode") === "replace" ? "replace" : "new";
-    if (!file || typeof file === "string") throw new StoreError("ファイルがありません");
-    const buf = Buffer.from(await file.arrayBuffer());
+    let buf: Buffer;
+    let mode: "new" | "replace";
+    let filename = "";
+    if ((req.headers.get("content-type") ?? "").includes("application/json")) {
+      // Web 版：先に保存先へ直接送った zip を受け取る
+      const body = (await req.json()) as { transferKey?: string; mode?: string };
+      mode = body.mode === "replace" ? "replace" : "new";
+      buf = await store.takeTransfer(String(body.transferKey ?? ""));
+    } else {
+      const form = await req.formData();
+      const file = form.get("file");
+      mode = form.get("mode") === "replace" ? "replace" : "new";
+      if (!file || typeof file === "string") throw new StoreError("ファイルがありません");
+      filename = file.name;
+      buf = Buffer.from(await file.arrayBuffer());
+    }
     const files = new Map<string, Buffer>();
     let raw: unknown;
-    if (file.name.endsWith(".zip") || buf.subarray(0, 2).toString() === "PK") {
+    if (filename.endsWith(".zip") || buf.subarray(0, 2).toString() === "PK") {
       let zip: JSZip;
       try {
         zip = await JSZip.loadAsync(buf);

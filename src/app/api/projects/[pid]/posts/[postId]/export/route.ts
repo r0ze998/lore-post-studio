@@ -35,6 +35,12 @@ export async function GET(_req: Request, { params }: RouteCtx<{ pid: string; pos
       }
     }
     const out = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+    const info = await store.storageInfo();
+    if (info.directTransfer) {
+      // Web 版：応答の大きさの上限（約 4.5MB）を避けるため、保存先に置いて短時間有効な URL へ転送する
+      const staged = await store.stageTransfer("exports", `post-${postId}.zip`, Buffer.from(out));
+      return Response.redirect(staged.url, 303);
+    }
     return new Response(out as BodyInit, {
       headers: {
         "Content-Type": "application/zip",
