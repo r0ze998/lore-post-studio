@@ -183,3 +183,37 @@ test("架空サンプル：問題の多い下書きで各検査が理由と参�
   const res = page.getByTestId("adhoc-result");
   await expect(res.locator('[data-rule="contradiction"]')).toContainText("300年前");
 });
+
+test("2 つの画面で同じ投稿を編集しても、手元の未保存の編集は消えない", async ({ page, context }, info) => {
+  await createProject(page, `衝突 ${info.project.name} ${Date.now()}`);
+  await nav(page, "企画ボード");
+  await page.getByRole("button", { name: "新しい投稿を企画" }).click();
+  await page.getByRole("dialog").locator("#cp-title").fill("衝突テスト");
+  await page.getByRole("dialog").getByRole("button", { name: "作成して編集へ" }).click();
+  await tab(page, "3 下書き");
+  await page.getByRole("button", { name: "白紙から書く" }).click();
+  await page.getByLabel("本文 1").fill("最初の本文");
+  await page.getByTestId("save-post").click();
+  await expect(page.getByTestId("save-post")).toHaveText("保存済み");
+
+  // 別の画面で同じ投稿を開いて保存
+  const other = await context.newPage();
+  await other.goto(page.url());
+  await tab(other, "3 下書き");
+  await other.getByLabel("本文 1").fill("別の画面で書いた本文");
+  await other.getByTestId("save-post").click();
+  await expect(other.getByTestId("save-post")).toHaveText("保存済み");
+
+  // 元の画面で編集して保存 → 衝突。手元の編集は残る
+  await page.getByLabel("本文 1").fill("手元で書いた本文");
+  await page.getByTestId("save-post").click();
+  await expect(page.getByTestId("conflict-banner")).toBeVisible();
+  await expect(page.getByLabel("本文 1")).toHaveValue("手元で書いた本文");
+
+  // 手元の編集で上書き
+  await page.getByRole("button", { name: "手元の編集で上書き保存" }).click();
+  await expect(page.getByTestId("conflict-banner")).toHaveCount(0);
+  await other.reload();
+  await tab(other, "3 下書き");
+  await expect(other.getByLabel("本文 1")).toHaveValue("手元で書いた本文");
+});
